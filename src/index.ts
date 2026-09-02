@@ -1,6 +1,6 @@
 export { FeedbackProvider } from "./FeedbackProvider";
 export { submitFeedback, fetchPinsForPage, publicUrlFor } from "./uploadFeedback";
-export { useFeedbackSupabaseClient } from "./client";
+export { useFeedbackSupabaseClient, feedbackClient } from "./client";
 export type {
   Locale,
   FeedbackStatus,
