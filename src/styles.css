@@ -10,9 +10,14 @@
    applying, which is how a widget that renders in a corner rearranged whole
    pages.
 
-   These are the same layers `@import "tailwindcss"` sets up, minus preflight,
-   so this sheet sits alongside the host's rather than above it. */
-@layer theme, components, utilities;
+   The order statement below names `base` even though this sheet puts nothing
+   in it. Layer priority is decided by FIRST APPEARANCE, so a host that imports
+   this sheet ahead of its own would otherwise have `base` first appear after
+   `utilities` -- making it the HIGHEST layer, which puts Tailwind's Preflight
+   above every utility and strips the host's app back to raw document flow.
+   Declaring the full canonical order means this sheet can be imported before
+   or after the host's without moving anything. */
+@layer theme, base, components, utilities;
 
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities);
