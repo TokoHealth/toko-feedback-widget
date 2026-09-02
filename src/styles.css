@@ -1,6 +1,20 @@
-/* Utilities only — Preflight is intentionally excluded so this stylesheet
-   never resets default element styles in the host app it's dropped into. */
-@import "tailwindcss/theme.css";
-@import "tailwindcss/utilities.css";
+/* Utilities only -- Preflight is intentionally excluded so this stylesheet
+   never resets default element styles in the host app it's dropped into.
+
+   LAYERED, which is the whole point. Importing `tailwindcss/utilities.css`
+   bare emits every utility unlayered, and unlayered CSS beats layered CSS
+   unconditionally -- so in a host whose own Tailwind lives in `@layer
+   utilities` (all of them), this package's `.flex`, `.w-full`, `.hidden` and
+   friends outranked not just the host's identical classes but its VARIANTS
+   too. Every `sm:` / `md:` / `hover:` override in the host app quietly stopped
+   applying, which is how a widget that renders in a corner rearranged whole
+   pages.
+
+   These are the same layers `@import "tailwindcss"` sets up, minus preflight,
+   so this sheet sits alongside the host's rather than above it. */
+@layer theme, components, utilities;
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
 
 @source "./**/*.{ts,tsx}";
