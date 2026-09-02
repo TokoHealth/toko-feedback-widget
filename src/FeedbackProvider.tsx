@@ -2,6 +2,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { FeedbackPin, Locale, PagePosition } from "./types";
 import { STRINGS } from "./i18n";
 import { SupabaseClientContext, feedbackClient } from "./client";
@@ -84,9 +85,27 @@ export function FeedbackProvider({
   const [toast, setToast] = useState<string | null>(null);
   const [pins, setPins] = useState<FeedbackPin[]>([]);
   const suppressNextClearRef = useRef(false);
+  const [portalNode, setPortalNode] = useState<HTMLElement | null>(null);
 
   const ctx = { product, environment, createdByEmail };
   const t = STRINGS[locale];
+
+  // Rendered into its own node appended to <body> -- not wherever the host
+  // happens to mount this provider -- so none of our UI ever becomes a DOM
+  // sibling of the host's content. A sibling is enough to break it: sibling
+  // combinators (`space-y-*`, `:nth-child`, `:first-child`) start counting
+  // our elements, and our `position: fixed`/`absolute` elements pick up
+  // whatever ancestor the host happens to nest us under as their containing
+  // block if it has `transform`/`filter`/`contain`, instead of the viewport.
+  useEffect(() => {
+    const node = document.createElement("div");
+    node.setAttribute("data-feedback-widget-root", "");
+    document.body.appendChild(node);
+    setPortalNode(node);
+    return () => {
+      document.body.removeChild(node);
+    };
+  }, []);
 
   useEffect(() => {
     fetchPinsForPage(client, product, window.location.href)
@@ -173,89 +192,108 @@ export function FeedbackProvider({
     <SupabaseClientContext.Provider value={client}>
       {children}
 
-      {pins.map((pin, i) => (
-        <Pin key={pin.id} pin={pin} number={i + 1} locale={locale} />
-      ))}
+      {portalNode &&
+        createPortal(
+          <>
+            {pins.map((pin, i) => (
+              <Pin key={pin.id} pin={pin} number={i + 1} locale={locale} />
+            ))}
 
-      {ui.mode === "bubble" && (
-        <SelectionBubble
-          locale={locale}
-          x={ui.anchor.x}
-          y={ui.anchor.y}
-          onClick={() => {
-            suppressNextClearRef.current = true;
-            const { text, anchor, position } = ui;
-            setUi({ mode: "panel", text, anchor, position, draftComment: "" });
-            setTimeout(() => {
-              suppressNextClearRef.current = false;
-            }, 0);
-          }}
-        />
-      )}
+            {ui.mode === "bubble" && (
+              <SelectionBubble
+                locale={locale}
+                x={ui.anchor.x}
+                y={ui.anchor.y}
+                onClick={() => {
+                  suppressNextClearRef.current = true;
+                  const { text, anchor, position } = ui;
+                  setUi({
+                    mode: "panel",
+                    text,
+                    anchor,
+                    position,
+                    draftComment: "",
+                  });
+                  setTimeout(() => {
+                    suppressNextClearRef.current = false;
+                  }, 0);
+                }}
+              />
+            )}
 
-      {ui.mode === "panel" && (
-        <div data-feedback-ui>
-          <FeedbackPanel
-            locale={locale}
-            ctx={ctx}
-            selectedText={ui.text}
-            anchor={ui.anchor}
-            position={ui.position}
-            initialComment={ui.draftComment}
-            onClose={close}
-            onSubmitted={(pin) => {
-              if (pin.metadata?.position) setPins((prev) => [...prev, pin]);
-            }}
-            onRequestDraw={(currentComment) => {
-              const { text, anchor, position } = ui;
-              setUi({
-                mode: "draw",
-                text,
-                anchor,
-                position,
-                draftComment: currentComment,
-              });
-            }}
-          />
-        </div>
-      )}
+            {ui.mode === "panel" && (
+              <div data-feedback-ui>
+                <FeedbackPanel
+                  locale={locale}
+                  ctx={ctx}
+                  selectedText={ui.text}
+                  anchor={ui.anchor}
+                  position={ui.position}
+                  initialComment={ui.draftComment}
+                  onClose={close}
+                  onSubmitted={(pin) => {
+                    if (pin.metadata?.position)
+                      setPins((prev) => [...prev, pin]);
+                  }}
+                  onRequestDraw={(currentComment) => {
+                    const { text, anchor, position } = ui;
+                    setUi({
+                      mode: "draw",
+                      text,
+                      anchor,
+                      position,
+                      draftComment: currentComment,
+                    });
+                  }}
+                />
+              </div>
+            )}
 
-      {ui.mode === "draw" && (
-        <div data-feedback-ui>
-          <DrawOverlay
-            locale={locale}
-            initialNote={ui.draftComment}
-            onCancel={() => {
-              const { text, anchor, position, draftComment } = ui;
-              setUi({ mode: "panel", text, anchor, position, draftComment });
-            }}
-            onSend={handleDrawSend}
-          />
-        </div>
-      )}
+            {ui.mode === "draw" && (
+              <div data-feedback-ui>
+                <DrawOverlay
+                  locale={locale}
+                  initialNote={ui.draftComment}
+                  onCancel={() => {
+                    const { text, anchor, position, draftComment } = ui;
+                    setUi({
+                      mode: "panel",
+                      text,
+                      anchor,
+                      position,
+                      draftComment,
+                    });
+                  }}
+                  onSend={handleDrawSend}
+                />
+              </div>
+            )}
 
-      {ui.mode === "idle" && (
-        <button
-          type="button"
-          data-feedback-ui
-          onClick={openLauncherPanel}
-          className="fixed bottom-4 z-[9996] flex items-center gap-1.5 rounded-full bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white shadow-xl hover:bg-neutral-800"
-          style={{ insetInlineEnd: 16 }}
-        >
-          <ChatIcon className="shrink-0" />
-          {t.launcher}
-        </button>
-      )}
+            {ui.mode === "idle" && (
+              <button
+                type="button"
+                data-feedback-ui
+                onClick={openLauncherPanel}
+                className="fixed bottom-4 z-[9996] flex items-center gap-1.5 rounded-full bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white shadow-xl hover:bg-neutral-800"
+                style={{ insetInlineEnd: 16 }}
+              >
+                <ChatIcon className="shrink-0" />
+                {t.launcher}
+              </button>
+            )}
 
-      {toast && (
-        <div
-          data-feedback-ui
-          className="fixed bottom-20 z-[9999] rounded-full bg-neutral-900 px-4 py-2 text-sm text-white shadow-xl"
-          style={{ insetInlineEnd: 16 }}
-        >
-          {toast}
-        </div>
-      )}
+            {toast && (
+              <div
+                data-feedback-ui
+                className="fixed bottom-20 z-[9999] rounded-full bg-neutral-900 px-4 py-2 text-sm text-white shadow-xl"
+                style={{ insetInlineEnd: 16 }}
+              >
+                {toast}
+              </div>
+            )}
+          </>,
+          portalNode
+        )}
     </SupabaseClientContext.Provider>
   );
 }
