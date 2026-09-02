@@ -1,0 +1,6 @@
+/* Utilities only — Preflight is intentionally excluded so this stylesheet
+   never resets default element styles in the host app it's dropped into. */
+@import "tailwindcss/theme.css";
+@import "tailwindcss/utilities.css";
+
+@source "./**/*.{ts,tsx}";

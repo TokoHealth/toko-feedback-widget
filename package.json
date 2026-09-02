@@ -1,0 +1,45 @@
+{
+  "name": "toko-feedback-widget",
+  "version": "0.1.0",
+  "private": false,
+  "description": "Internal feedback widget: select text or draw on a screenshot to send feedback into Supabase.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./style.css": "./dist/style.css"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup && tailwindcss -i src/styles.css -o dist/style.css --minify",
+    "prepare": "npm run build",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@supabase/supabase-js": ">=2.0.0",
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "dependencies": {
+    "html-to-image": "^1.11.11"
+  },
+  "devDependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "@tailwindcss/cli": "^4",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "react": "^19",
+    "react-dom": "^19",
+    "tailwindcss": "^4",
+    "tsup": "^8.3.5",
+    "typescript": "^5"
+  }
+}
