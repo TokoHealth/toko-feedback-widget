@@ -10,43 +10,39 @@ Supports RTL/Hebrew out of the box (`locale="he"`).
 
 ## Install
 
-This is a private package, installed straight from GitHub (no registry setup
-needed):
+Private package, installed straight from GitHub — no registry setup:
 
 ```bash
 npm install github:TokoHealth/toko-feedback-widget
-npm install @supabase/supabase-js html-to-image
 ```
+
+That is the whole install. `@supabase/supabase-js` and `html-to-image` come
+with it, and there is nothing to configure: the widget carries its own
+connection to the shared feedback project.
+
+> **Private repo, public builds.** A private GitHub dependency is cloned over
+> SSH, so any CI or host that lacks a deploy key fails at `npm install` with
+> `git@github.com: Permission denied (publickey)`. Vercel does. Either make
+> this repo public (the only credential in it is a publishable key that is
+> served to browsers anyway) or give the host a read-only token.
 
 ## Usage
 
-> **Next.js App Router:** the component (or the file that renders it) needs
-> `"use client"`. `supabaseClient` is a stateful object with circular
-> references (realtime channels etc.) — passing it as a prop from a Server
-> Component crashes with `RangeError: Maximum call stack size exceeded` when
-> Next tries to serialize it across the server/client boundary. Create the
-> client and render `<FeedbackProvider>` from a Client Component.
+> **Next.js App Router:** the component that renders `<FeedbackProvider>` needs
+> `"use client"` — it uses hooks.
 
 ```tsx
 "use client";
 
-import { createClient } from "@supabase/supabase-js";
 import { FeedbackProvider } from "toko-feedback-widget";
 import "toko-feedback-widget/style.css";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
-export default function RootLayout({ children }) {
+export function Feedback({ children, email }) {
   return (
     <FeedbackProvider
-      supabaseClient={supabase}
-      product="toko-app" // whatever you want to filter by in /review
-      environment="production" // or "staging" / "local" — defaults to "production"
-      locale="he" // or "en"
-      createdByEmail={currentUser?.email}
+      product="toko-app"        // what you filter by in /review
+      createdByEmail={email}    // whoever is signed in
+      locale="he"               // or "en"
     >
       {children}
     </FeedbackProvider>
@@ -54,12 +50,22 @@ export default function RootLayout({ children }) {
 }
 ```
 
-Env vars (same project for every consumer, so feedback aggregates centrally):
+`environment` defaults to Vercel's `VERCEL_ENV` (production / preview /
+development) and falls back to `"production"`.
 
+### Pointing it somewhere else
+
+`supabaseClient` is optional and defaults to the widget's own client. Pass one
+only to override it — a test double, or a fork aimed at a different project:
+
+```tsx
+<FeedbackProvider supabaseClient={myClient} product="toko-app">{children}</FeedbackProvider>
 ```
-NEXT_PUBLIC_SUPABASE_URL=https://lysgohidbhsvowzctsqx.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_oDMnGHD5EC43qqGc1_X7dw_6Xq7UlUv
-```
+
+Do **not** reuse your app's own `NEXT_PUBLIC_SUPABASE_URL` /
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` for this. Those point at your product's own
+database, which has no `feedback_items` table — and repointing them to this
+project signs every one of your users out.
 
 That's it — a "Feedback" launcher button appears, text selection shows a
 "Suggest edit" bubble, and submitted feedback leaves a numbered pin on the

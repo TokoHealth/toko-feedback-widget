@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FeedbackPin, Locale, PagePosition } from "./types";
 import { STRINGS } from "./i18n";
-import { SupabaseClientContext } from "./client";
+import { SupabaseClientContext, feedbackClient } from "./client";
 import { SelectionBubble } from "./SelectionBubble";
 import { FeedbackPanel } from "./FeedbackPanel";
 import { DrawOverlay } from "./DrawOverlay";
@@ -13,10 +13,12 @@ import { fetchPinsForPage, submitFeedback } from "./uploadFeedback";
 import { ChatIcon } from "./icons";
 
 interface FeedbackProviderProps {
-  /** A Supabase client already pointed at the shared feedback project. */
-  supabaseClient: SupabaseClient;
+  /** Optional. Defaults to the widget's own client, pointed at the shared
+   *  feedback project -- pass one only to override it (tests, a fork). */
+  supabaseClient?: SupabaseClient;
   /** Identifies which product this feedback came from, e.g. "toko-app". */
   product: string;
+  /** Defaults to Vercel's VERCEL_ENV, else "production". */
   environment?: string;
   createdByEmail?: string;
   locale?: Locale;
@@ -46,14 +48,38 @@ type UIState =
       draftComment: string;
     };
 
+// This package has no @types/node, and should not: it runs in a browser. The
+// declaration is here only so the one expression below type-checks.
+declare const process: { env: Record<string, string | undefined> };
+
+/**
+ * production / preview / development on Vercel; "production" anywhere else.
+ *
+ * Written as the literal `process.env.NEXT_PUBLIC_VERCEL_ENV` on purpose.
+ * Bundlers substitute that exact expression at build time; behind an optional
+ * chain or a destructure they do not, and it silently reads undefined in the
+ * browser. When it is not substituted the identifier does not exist at all, so
+ * the reference throws and the catch supplies the default.
+ */
+function defaultEnvironment(): string {
+  try {
+    return process.env.NEXT_PUBLIC_VERCEL_ENV ?? "production";
+  } catch {
+    return "production";
+  }
+}
+
 export function FeedbackProvider({
   supabaseClient,
   product,
-  environment = "production",
+  environment = defaultEnvironment(),
   createdByEmail,
   locale = "en",
   children,
 }: FeedbackProviderProps) {
+  // Every consumer built the same client from the same two constants, which is
+  // a property of this widget rather than of any of them.
+  const client = supabaseClient ?? feedbackClient();
   const [ui, setUi] = useState<UIState>({ mode: "idle" });
   const [toast, setToast] = useState<string | null>(null);
   const [pins, setPins] = useState<FeedbackPin[]>([]);
@@ -63,7 +89,7 @@ export function FeedbackProvider({
   const t = STRINGS[locale];
 
   useEffect(() => {
-    fetchPinsForPage(supabaseClient, product, window.location.href)
+    fetchPinsForPage(client, product, window.location.href)
       .then(setPins)
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -129,7 +155,7 @@ export function FeedbackProvider({
     if (ui.mode !== "draw") return;
     const comment = note.trim() || t.drawNotePlaceholder;
     try {
-      const pin = await submitFeedback(supabaseClient, ctx, {
+      const pin = await submitFeedback(client, ctx, {
         selectedText: ui.text,
         comment,
         attachment: { blob, kind: "drawing" },
@@ -144,7 +170,7 @@ export function FeedbackProvider({
   }
 
   return (
-    <SupabaseClientContext.Provider value={supabaseClient}>
+    <SupabaseClientContext.Provider value={client}>
       {children}
 
       {pins.map((pin, i) => (

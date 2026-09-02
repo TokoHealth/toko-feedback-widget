@@ -24,11 +24,11 @@
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "@supabase/supabase-js": ">=2.0.0",
     "react": ">=18",
     "react-dom": ">=18"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
     "html-to-image": "^1.11.11"
   },
   "devDependencies": {
