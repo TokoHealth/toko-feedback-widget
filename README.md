@@ -20,7 +20,16 @@ npm install @supabase/supabase-js html-to-image
 
 ## Usage
 
+> **Next.js App Router:** the component (or the file that renders it) needs
+> `"use client"`. `supabaseClient` is a stateful object with circular
+> references (realtime channels etc.) — passing it as a prop from a Server
+> Component crashes with `RangeError: Maximum call stack size exceeded` when
+> Next tries to serialize it across the server/client boundary. Create the
+> client and render `<FeedbackProvider>` from a Client Component.
+
 ```tsx
+"use client";
+
 import { createClient } from "@supabase/supabase-js";
 import { FeedbackProvider } from "toko-feedback-widget";
 import "toko-feedback-widget/style.css";
