@@ -3,7 +3,7 @@
 Internal feedback widget for Toko products. Team members can select any text
 on the page to suggest an edit, or draw on a screenshot (à la Claude's design
 review UI) to point at something and leave a note. Submissions are written to
-a shared Supabase table (`public.feedback_items`, project **Toko Studio**) so
+a shared Supabase table (`public.feedback_items`, project **Toko Internal**) so
 they all land in one review inbox regardless of which product they came from.
 
 Supports RTL/Hebrew out of the box (`locale="he"`).
@@ -70,6 +70,25 @@ project signs every one of your users out.
 That's it — a "Feedback" launcher button appears, text selection shows a
 "Suggest edit" bubble, and submitted feedback leaves a numbered pin on the
 page that anyone loading that same URL will see.
+
+## The backing schema
+
+`supabase/migrations/` holds the table, the `feedback-attachments` bucket and
+their RLS policies. It is here rather than in the app repos because the schema
+belongs to the widget: the code in `uploadFeedback.ts` is the only thing that
+writes these columns.
+
+Keep it that way. This table previously lived only in the Supabase dashboard,
+created by hand -- so when its project was deleted there was no definition left
+to replay, and the widget failed silently in every product at once.
+
+`anon` gets insert and select, nothing more. Triage (`status` changes) happens
+in /review under a real session, never from a browser holding the published key.
+
+> **Applying it.** Toko Internal is shared with other internal tooling whose
+> migration history lives elsewhere, so `supabase db push` from this repo will
+> refuse to run. Apply this file through the dashboard SQL editor instead. It is
+> idempotent, so re-running it is safe.
 
 ## Reviewing feedback
 
