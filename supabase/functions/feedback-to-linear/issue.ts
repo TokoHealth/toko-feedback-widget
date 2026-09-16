@@ -1,0 +1,62 @@
+// Turns a feedback row into Linear's IssueCreateInput. No I/O.
+
+export type FeedbackRow = {
+  id: string;
+  product: string;
+  environment: string;
+  url: string;
+  page_title: string | null;
+  comment: string;
+  selected_text: string | null;
+  created_by_email: string | null;
+  screenshot_path: string | null;
+  annotated_image_path: string | null;
+  linear_attempts: number;
+};
+
+export type IssueInput = {
+  id: string;
+  teamId: string;
+  title: string;
+  description: string;
+};
+
+const TITLE_MAX = 80;
+const TEXT_MAX = 10_000;
+
+export function truncate(text: string, max: number): string {
+  return text.length <= max ? text : text.slice(0, max - 1) + "…";
+}
+
+function quote(text: string): string {
+  return truncate(text, TEXT_MAX).split("\n").map((line) => `> ${line}`).join("\n");
+}
+
+export function publicImageUrl(supabaseUrl: string, path: string): string {
+  const encoded = path.split("/").map(encodeURIComponent).join("/");
+  return `${supabaseUrl}/storage/v1/object/public/feedback-attachments/${encoded}`;
+}
+
+export function buildIssueInput(
+  row: FeedbackRow,
+  opts: { teamId: string; supabaseUrl: string },
+): IssueInput {
+  const firstLine = row.comment.trim().split("\n")[0];
+  const title = truncate(`[${row.product}] ${firstLine}`, TITLE_MAX);
+
+  const parts = [quote(row.comment)];
+  if (row.selected_text) parts.push(`**Selected text**\n\n${quote(row.selected_text)}`);
+  parts.push(
+    [
+      `**Reporter:** ${row.created_by_email ?? "unknown"}`,
+      `**Environment:** ${row.environment}`,
+      `**Page:** [${row.page_title || row.url}](<${row.url}>)`,
+    ].join("  \n"),
+  );
+  for (const [label, path] of [["Screenshot", row.screenshot_path], ["Drawing", row.annotated_image_path]]) {
+    if (path) parts.push(`![${label}](<${publicImageUrl(opts.supabaseUrl, path)}>)`);
+  }
+  parts.push(`Feedback row \`${row.id}\``);
+
+  return { id: row.id, teamId: opts.teamId, title, description: parts.join("\n\n") };
+}
