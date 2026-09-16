@@ -37,6 +37,12 @@ function quote(text: string): string {
   return truncate(text, TEXT_MAX).split("\n").map((line) => `> ${line}`).join("\n");
 }
 
+// Ends every description. Duplicate recovery checks for it, because anon
+// callers can choose a row id that matches someone else's issue.
+export function rowMarker(id: string): string {
+  return `Feedback row \`${id}\``;
+}
+
 export function publicImageUrl(supabaseUrl: string, path: string): string {
   const encoded = path.split("/").map(encodeURIComponent).join("/");
   return `${supabaseUrl}/storage/v1/object/public/feedback-attachments/${encoded}`;
@@ -61,7 +67,7 @@ export function buildIssueInput(
   for (const [label, path] of [["Screenshot", row.screenshot_path], ["Drawing", row.annotated_image_path]]) {
     if (path) parts.push(`![${label}](<${publicImageUrl(opts.supabaseUrl, path)}>)`);
   }
-  parts.push(`Feedback row \`${row.id}\``);
+  parts.push(rowMarker(row.id));
 
   return { id: row.id, teamId: opts.teamId, title, description: parts.join("\n\n") };
 }

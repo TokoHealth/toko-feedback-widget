@@ -98,13 +98,24 @@ Deno.test("a retry after a crash records the existing issue instead of a second 
       status: 400,
       body: { data: null, errors: [{ message: "conflict on insert of Issue", extensions: { code: "INPUT_ERROR", userPresentableMessage: `Entity Issue with id ${row(1).id} already exists.` } }] },
     },
-    { body: { data: { issue: { identifier: "TOK-9", url: "https://linear.app/i/TOK-9" } } } },
+    { body: { data: { issue: { identifier: "TOK-9", url: "https://linear.app/i/TOK-9", description: `text\n\nFeedback row \`${row(1).id}\`` } } } },
   ]);
   const res = await createHandler(ENV, db, linear.fetchFn)(post());
   assertEquals(await res.json(), { claimed: 1, created: 1, failed: 0 });
   assertEquals(linear.sent.length, 2);
   assertStringIncludes(linear.sent[1].query, "issue(id");
   assertEquals(calls, ["claim", `issue ${row(1).id} TOK-9`]);
+});
+
+Deno.test("an unrelated issue with the same id is not recorded", async () => {
+  const { db, calls } = fakeDb([row(1)]);
+  const linear = fakeLinear([
+    { status: 400, body: { errors: [{ message: "conflict", extensions: { code: "INPUT_ERROR", userPresentableMessage: "Entity Issue with id x already exists." } }] } },
+    { body: { data: { issue: { identifier: "TOK-5", url: "https://linear.app/i/TOK-5", description: "someone else's issue" } } } },
+  ]);
+  const res = await createHandler(ENV, db, linear.fetchFn)(post());
+  assertEquals(await res.json(), { claimed: 1, created: 0, failed: 1 });
+  assertEquals(calls, ["claim", `error ${row(1).id} Linear already has an unrelated issue with this row's id`]);
 });
 
 Deno.test("a rate limit releases this and later rows without using an attempt", async () => {

@@ -3,7 +3,7 @@
 // Design: docs/feedback-to-linear/design.md
 
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { buildIssueInput, type FeedbackRow, truncate } from "./issue.ts";
+import { buildIssueInput, type FeedbackRow, rowMarker, truncate } from "./issue.ts";
 
 const BATCH = 25;
 const ERROR_MAX = 500;
@@ -71,16 +71,21 @@ async function createIssue(
     const issue = created.data?.issueCreate?.issue;
     if (issue) return { kind: "created", issue };
 
-    // The row id is the issue id, so "already exists" means an earlier run
-    // created it and crashed before writing it back. Record that issue.
+    // The row id is the issue id, so "already exists" usually means an earlier
+    // run created it and crashed before writing it back. Record that issue, but
+    // only if it is ours: a row id can be chosen to match an unrelated issue.
     const duplicate = created.errors.some((e) =>
       /already exists/i.test(e.extensions?.userPresentableMessage ?? e.message ?? "")
     );
     if (duplicate) {
-      const found = await linear(fetchFn, key, timeoutMs, "query($id: String!) { issue(id: $id) { identifier url } }", {
+      const found = await linear(fetchFn, key, timeoutMs, "query($id: String!) { issue(id: $id) { identifier url description } }", {
         id: input.id,
       });
-      if (found.data?.issue) return { kind: "created", issue: found.data.issue };
+      const existing = found.data?.issue;
+      if (existing?.description?.includes(rowMarker(input.id))) {
+        return { kind: "created", issue: { identifier: existing.identifier, url: existing.url } };
+      }
+      if (existing) return { kind: "failed", error: "Linear already has an unrelated issue with this row's id" };
     }
     const messages = created.errors.map((e) => e.extensions?.userPresentableMessage ?? e.message).join("; ");
     return { kind: "failed", error: `Linear ${created.status}: ${messages || "no issue returned"}` };
