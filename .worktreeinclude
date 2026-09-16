@@ -1,0 +1,6 @@
+# Untracked files bb copies from the source checkout into a new worktree.
+# gitignore syntax; patterns without a slash match at any depth.
+.env
+.env.*
+!.env.example
+!.env.*.example
