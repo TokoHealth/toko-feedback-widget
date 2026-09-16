@@ -96,6 +96,14 @@ The review dashboard lives in the separate `toko-feedback` repo (`/review`
 route) — point it at the same Supabase project and it lists everything
 submitted from every product that has this widget installed.
 
+## Linear issues
+
+Every feedback row becomes a Linear issue in the Toko team within about five
+minutes: a cron job calls the `feedback-to-linear` Edge Function, which writes
+the issue key back to `linear_issue_id`. See
+[the design](docs/feedback-to-linear/design.md). Tests: `npm run test:db` and
+`npm run test:functions` (Linear is always faked).
+
 ## Why a shipped stylesheet instead of Tailwind classes your app compiles?
 
 The components use Tailwind utility classes, but this package ships its own

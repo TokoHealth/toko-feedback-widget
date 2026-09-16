@@ -22,7 +22,8 @@
     "build": "tsup && tailwindcss -i src/styles.css -o dist/style.css --minify",
     "prepare": "npm run build",
     "typecheck": "tsc --noEmit",
-    "test:db": "scripts/test-db.sh"
+    "test:db": "scripts/test-db.sh",
+    "test:functions": "scripts/test-functions.sh"
   },
   "peerDependencies": {
     "react": ">=18",

@@ -47,7 +47,7 @@ At 09:08 an animator selects a scene prompt in Toko Forge and writes "the settin
 
 At 09:10 pg_cron fires. It uses pg_net to POST to `/functions/v1/feedback-to-linear` with the header `x-feedback-sync-secret`, whose value comes from Supabase Vault, and `timeout_milliseconds := 300000`. pg_net's default 2-second timeout would drop the call partway through a run. The function checks the header, then calls the Postgres function `claim_feedback_for_linear(25)` with the service role key. That call stamps `linear_claimed_at = now()` on up to 25 unticketed rows, oldest first, adds one to `linear_attempts`, and returns them.
 
-For each row the function builds an issue: the title is the first 80 characters of the comment, prefixed with the product (`[toko-forge] the setting should be with more people`). The description quotes the comment, the selected text, the reporter's email, the environment, and the page. Screenshots appear as images using their public bucket URLs. The page URL is also attached as a link. The function calls Linear's `issueCreate` with `id` set to the row's id, then writes the returned `identifier` and `url` into `linear_issue_id` and `linear_issue_url` and clears `linear_claimed_at` and `linear_last_error`.
+For each row the function builds an issue: the title is the first 80 characters of the comment, prefixed with the product (`[toko-forge] the setting should be with more people`). The description quotes the comment, the selected text, the reporter's email, the environment, and the page. Screenshots appear as images using their public bucket URLs. The page link is in the description; no separate Linear attachment, which would cost a second call per issue. The function calls Linear's `issueCreate` with `id` set to the row's id, then writes the returned `identifier` and `url` into `linear_issue_id` and `linear_issue_url` and clears `linear_claimed_at` and `linear_last_error`.
 
 The animator sees nothing new in the widget. The team sees `TOK-7xx` in the Toko backlog, and the row now shows which issue it became.
 
@@ -154,6 +154,8 @@ The Linear issue UUID is the feedback row's `id`, so it exists before the reques
 **The function crashes after creating the issue but before writing it back.** The claim runs out after 10 minutes. The next run sends the same issue id, Linear rejects the duplicate, the function reads the existing issue and writes it back. No second issue is created (INV-1). A deleted issue still blocks its id, and `issue(id)` still returns it with `trashed: true`, so the row records that issue and is never ticketed again (checked 2026-09-16). If `issue(id)` ever finds nothing, the row records the error and stops after 10 attempts.
 
 **The write back fails** (for example, Supabase is briefly unavailable). This is handled like a crash, as above.
+
+**Linear stops answering.** Each Linear request times out after 10 seconds and counts as a failure for that row. A run stops starting rows after 240 seconds (Edge Functions are stopped at 400) and releases the rest without using an attempt.
 
 **Runs overlap.** `skip locked` and the 10-minute claim keep them on different rows.
 
