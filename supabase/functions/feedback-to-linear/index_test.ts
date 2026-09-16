@@ -159,6 +159,36 @@ Deno.test("the issue carries product, comment, selection, reporter, environment,
   ]) assertStringIncludes(input.description, part);
 });
 
+Deno.test("page title, URL and email cannot add links, images or lines", () => {
+  const input = buildIssueInput(
+    row(1, {
+      page_title: "x](https://evil.test) ![i](https://evil.test/p.png)",
+      url: "https://a.test/?q=%20ok>\n![i](https://evil.test)",
+      created_by_email: "a@b.c\n\n![i](https://evil.test)",
+    }),
+    { teamId: "t", supabaseUrl: "u" },
+  );
+  const lines = input.description.split("\n").filter((l) => l.startsWith("**"));
+  assertEquals(lines, [
+    String.raw`**Reporter:** a@b.c \!\[i\]\(https://evil.test\)  `,
+    "**Environment:** production  ",
+    String.raw`**Page:** [x\]\(https://evil.test\) \!\[i\]\(https://evil.test/p.png\)](<https://a.test/?q=%20ok%3E%0A![i](https://evil.test)>)`,
+  ]);
+});
+
+Deno.test("a failed database write gives untried rows back their attempt", async () => {
+  const { db, calls } = fakeDb([row(1), row(2), row(3)]);
+  db.saveIssue = (id) => {
+    calls.push(`issue ${id}`);
+    return id === row(2).id ? Promise.reject(new Error("db down")) : Promise.resolve();
+  };
+  const linear = fakeLinear([ok(1), ok(2)]);
+  let threw = false;
+  await createHandler(ENV, db, linear.fetchFn)(post()).catch(() => (threw = true));
+  assert(threw);
+  assertEquals(calls, ["claim", `issue ${row(1).id}`, `issue ${row(2).id}`, `release ${row(2).id}`, `release ${row(3).id}`]);
+});
+
 Deno.test("long titles and texts are cut", () => {
   const input = buildIssueInput(row(1, { comment: "y".repeat(20_000) }), { teamId: "t", supabaseUrl: "u" });
   assertEquals(input.title.length, 80);

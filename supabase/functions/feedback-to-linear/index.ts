@@ -40,15 +40,19 @@ async function linear(fetchFn: typeof fetch, key: string, query: string, variabl
     body: JSON.stringify({ query, variables }),
   });
   const body = await res.json().catch(() => ({}));
-  const errors: { message?: string; extensions?: { code?: string; userPresentableMessage?: string } }[] =
-    body.errors ?? [];
+  const errors: { message?: string; extensions?: { code?: string; userPresentableMessage?: string } }[] = body.errors ??
+    [];
   if (res.status === 429 || errors.some((e) => e.extensions?.code === "RATELIMITED")) {
     throw new RateLimited();
   }
   return { status: res.status, data: body.data, errors };
 }
 
-async function createIssue(fetchFn: typeof fetch, key: string, input: ReturnType<typeof buildIssueInput>): Promise<CreateResult> {
+async function createIssue(
+  fetchFn: typeof fetch,
+  key: string,
+  input: ReturnType<typeof buildIssueInput>,
+): Promise<CreateResult> {
   try {
     const created = await linear(
       fetchFn,
@@ -104,24 +108,32 @@ export function createHandler(env: Env, db: Db, fetchFn: typeof fetch = fetch) {
     const rows = await db.claim(BATCH);
     let created = 0;
     let failed = 0;
-    for (const [i, row] of rows.entries()) {
-      const input = buildIssueInput(row, { teamId: env.linearTeamId, supabaseUrl: env.supabaseUrl });
-      const result = await createIssue(fetchFn, key, input);
-      if (result.kind === "rate_limited") {
-        // Leave the rest for the next run without costing them an attempt.
-        for (const rest of rows.slice(i)) await db.release(rest);
-        console.warn(`Linear rate limit: released ${rows.length - i} rows`);
-        break;
+    let i = 0;
+    try {
+      for (; i < rows.length; i++) {
+        const row = rows[i];
+        const input = buildIssueInput(row, { teamId: env.linearTeamId, supabaseUrl: env.supabaseUrl });
+        const result = await createIssue(fetchFn, key, input);
+        if (result.kind === "rate_limited") {
+          // Leave the rest for the next run without costing them an attempt.
+          for (const rest of rows.slice(i)) await db.release(rest);
+          console.warn(`Linear rate limit: released ${rows.length - i} rows`);
+          break;
+        }
+        if (result.kind === "created") {
+          await db.saveIssue(row.id, result.issue.identifier, result.issue.url);
+          created++;
+        } else {
+          const error = clean(result.error);
+          console.error(`feedback ${row.id}: ${error}`);
+          await db.saveError(row.id, error);
+          failed++;
+        }
       }
-      if (result.kind === "created") {
-        await db.saveIssue(row.id, result.issue.identifier, result.issue.url);
-        created++;
-      } else {
-        const error = clean(result.error);
-        console.error(`feedback ${row.id}: ${error}`);
-        await db.saveError(row.id, error);
-        failed++;
-      }
+    } catch (e) {
+      // A database write failed. Give the untried rows back their attempt.
+      for (const rest of rows.slice(i)) await db.release(rest).catch(() => {});
+      throw e;
     }
     return json(200, { claimed: rows.length, created, failed });
   };

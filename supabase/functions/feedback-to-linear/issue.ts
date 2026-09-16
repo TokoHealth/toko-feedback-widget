@@ -28,6 +28,11 @@ export function truncate(text: string, max: number): string {
   return text.length <= max ? text : text.slice(0, max - 1) + "…";
 }
 
+// For single-line values inside Markdown: no line breaks, links or images.
+function inline(text: string): string {
+  return text.replace(/\s+/g, " ").replace(/[\\[\]()<>!`*_]/g, "\\$&");
+}
+
 function quote(text: string): string {
   return truncate(text, TEXT_MAX).split("\n").map((line) => `> ${line}`).join("\n");
 }
@@ -42,15 +47,15 @@ export function buildIssueInput(
   opts: { teamId: string; supabaseUrl: string },
 ): IssueInput {
   const firstLine = row.comment.trim().split("\n")[0];
-  const title = truncate(`[${row.product}] ${firstLine}`, TITLE_MAX);
+  const title = truncate(`[${row.product}] ${firstLine}`.replace(/\s+/g, " "), TITLE_MAX);
 
   const parts = [quote(row.comment)];
   if (row.selected_text) parts.push(`**Selected text**\n\n${quote(row.selected_text)}`);
   parts.push(
     [
-      `**Reporter:** ${row.created_by_email ?? "unknown"}`,
-      `**Environment:** ${row.environment}`,
-      `**Page:** [${row.page_title || row.url}](<${row.url}>)`,
+      `**Reporter:** ${inline(row.created_by_email ?? "unknown")}`,
+      `**Environment:** ${inline(row.environment)}`,
+      `**Page:** [${inline(row.page_title || row.url)}](<${row.url.replace(/[\s<>]/g, encodeURIComponent)}>)`,
     ].join("  \n"),
   );
   for (const [label, path] of [["Screenshot", row.screenshot_path], ["Drawing", row.annotated_image_path]]) {
