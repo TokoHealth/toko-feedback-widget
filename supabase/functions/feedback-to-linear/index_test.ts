@@ -177,7 +177,7 @@ Deno.test("page title, URL and email cannot add links, images or lines", () => {
 });
 
 Deno.test("a backslash in the URL cannot end the link early", () => {
-  const input = buildIssueInput(row(1, { url: String.raw`x![i](https://evil.test/p.png)\` }), { teamId: "t", supabaseUrl: "u" });
+  const input = buildIssueInput(row(1, { url: "x![i](https://evil.test/p.png)\\" }), { teamId: "t", supabaseUrl: "u" });
   assertStringIncludes(input.description, "(<x![i](https://evil.test/p.png)%5C>)");
 });
 
