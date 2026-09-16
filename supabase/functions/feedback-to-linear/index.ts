@@ -9,6 +9,11 @@ const BATCH = 25;
 const ERROR_MAX = 500;
 const LINEAR_URL = "https://api.linear.app/graphql";
 
+// A stalled Linear call must not hold the whole batch. Edge Functions stop
+// after 400 seconds, so a run stops starting rows after 240 and releases the rest.
+export type Limits = { requestTimeoutMs: number; runBudgetMs: number };
+const LIMITS: Limits = { requestTimeoutMs: 10_000, runBudgetMs: 240_000 };
+
 export type Env = {
   syncSecret?: string;
   linearApiKey?: string;
@@ -33,9 +38,10 @@ type CreateResult =
 
 class RateLimited extends Error {}
 
-async function linear(fetchFn: typeof fetch, key: string, query: string, variables: unknown) {
+async function linear(fetchFn: typeof fetch, key: string, timeoutMs: number, query: string, variables: unknown) {
   const res = await fetchFn(LINEAR_URL, {
     method: "POST",
+    signal: AbortSignal.timeout(timeoutMs),
     headers: { "Content-Type": "application/json", Authorization: key },
     body: JSON.stringify({ query, variables }),
   });
@@ -51,12 +57,14 @@ async function linear(fetchFn: typeof fetch, key: string, query: string, variabl
 async function createIssue(
   fetchFn: typeof fetch,
   key: string,
+  timeoutMs: number,
   input: ReturnType<typeof buildIssueInput>,
 ): Promise<CreateResult> {
   try {
     const created = await linear(
       fetchFn,
       key,
+      timeoutMs,
       "mutation($i: IssueCreateInput!) { issueCreate(input: $i) { success issue { identifier url } } }",
       { i: input },
     );
@@ -69,7 +77,7 @@ async function createIssue(
       /already exists/i.test(e.extensions?.userPresentableMessage ?? e.message ?? "")
     );
     if (duplicate) {
-      const found = await linear(fetchFn, key, "query($id: String!) { issue(id: $id) { identifier url } }", {
+      const found = await linear(fetchFn, key, timeoutMs, "query($id: String!) { issue(id: $id) { identifier url } }", {
         id: input.id,
       });
       if (found.data?.issue) return { kind: "created", issue: found.data.issue };
@@ -93,7 +101,7 @@ function sameSecret(a: string, b: string): boolean {
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
-export function createHandler(env: Env, db: Db, fetchFn: typeof fetch = fetch) {
+export function createHandler(env: Env, db: Db, fetchFn: typeof fetch = fetch, limits: Limits = LIMITS) {
   return async (req: Request): Promise<Response> => {
     if (!env.syncSecret) return json(500, { error: "FEEDBACK_SYNC_SECRET is not set" });
     if (!sameSecret(req.headers.get("x-feedback-sync-secret") ?? "", env.syncSecret)) {
@@ -105,6 +113,7 @@ export function createHandler(env: Env, db: Db, fetchFn: typeof fetch = fetch) {
     const key = env.linearApiKey;
     const clean = (error: string) => truncate(error.replaceAll(key, "[redacted]"), ERROR_MAX);
 
+    const started = Date.now();
     const rows = await db.claim(BATCH);
     let created = 0;
     let failed = 0;
@@ -112,8 +121,13 @@ export function createHandler(env: Env, db: Db, fetchFn: typeof fetch = fetch) {
     try {
       for (; i < rows.length; i++) {
         const row = rows[i];
+        if (Date.now() - started > limits.runBudgetMs) {
+          for (const rest of rows.slice(i)) await db.release(rest);
+          console.warn(`Run budget spent: released ${rows.length - i} rows`);
+          break;
+        }
         const input = buildIssueInput(row, { teamId: env.linearTeamId, supabaseUrl: env.supabaseUrl });
-        const result = await createIssue(fetchFn, key, input);
+        const result = await createIssue(fetchFn, key, limits.requestTimeoutMs, input);
         if (result.kind === "rate_limited") {
           // Leave the rest for the next run without costing them an attempt.
           for (const rest of rows.slice(i)) await db.release(rest);

@@ -155,6 +155,8 @@ The Linear issue UUID is the feedback row's `id`, so it exists before the reques
 
 **The write back fails** (for example, Supabase is briefly unavailable). This is handled like a crash, as above.
 
+**Linear stops answering.** Each Linear request times out after 10 seconds and counts as a failure for that row. A run stops starting rows after 240 seconds (Edge Functions are stopped at 400) and releases the rest without using an attempt.
+
 **Runs overlap.** `skip locked` and the 10-minute claim keep them on different rows.
 
 **Bad secret or missing secrets at startup.** A wrong header returns 401 and does nothing. If `LINEAR_API_KEY` or `LINEAR_TEAM_ID` is missing, the function returns 500 before claiming anything, so no attempts are used up.

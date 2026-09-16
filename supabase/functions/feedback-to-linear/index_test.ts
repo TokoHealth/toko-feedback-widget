@@ -181,6 +181,30 @@ Deno.test("a backslash in the URL cannot end the link early", () => {
   assertStringIncludes(input.description, "(<x![i](https://evil.test/p.png)%5C>)");
 });
 
+Deno.test("a Linear call that never answers times out and the run moves on", async () => {
+  const { db, calls } = fakeDb([row(1), row(2)]);
+  let n = 0;
+  const fetchFn = ((_url: string, init: RequestInit) => {
+    if (n++ === 0) {
+      return new Promise((_, reject) => init.signal!.addEventListener("abort", () => reject(init.signal!.reason)));
+    }
+    return Promise.resolve(new Response(JSON.stringify(ok(2).body)));
+  }) as typeof fetch;
+  const res = await createHandler(ENV, db, fetchFn, { requestTimeoutMs: 20, runBudgetMs: 60_000 })(post());
+  assertEquals(await res.json(), { claimed: 2, created: 1, failed: 1 });
+  assertStringIncludes(calls[1], `error ${row(1).id} TimeoutError`);
+  assertEquals(calls[2], `issue ${row(2).id} TOK-2`);
+});
+
+Deno.test("once the run budget is spent, the rest are released untried", async () => {
+  const { db, calls } = fakeDb([row(1), row(2)]);
+  const linear = fakeLinear([]);
+  const res = await createHandler(ENV, db, linear.fetchFn, { requestTimeoutMs: 10, runBudgetMs: -1 })(post());
+  assertEquals(await res.json(), { claimed: 2, created: 0, failed: 0 });
+  assertEquals(linear.sent.length, 0);
+  assertEquals(calls, ["claim", `release ${row(1).id}`, `release ${row(2).id}`]);
+});
+
 Deno.test("a failed database write gives untried rows back their attempt", async () => {
   const { db, calls } = fakeDb([row(1), row(2), row(3)]);
   db.saveIssue = (id) => {
