@@ -139,7 +139,7 @@ update feedback_items
 
 After a failure the function sets `linear_last_error` and clears `linear_claimed_at`, so the next run, five minutes later, retries the row.
 
-Function secrets, set with `supabase secrets set` and never committed: `LINEAR_API_KEY`, `LINEAR_TEAM_ID` (`f22b9dae-976e-40ef-82a0-97e93231a2a3`), and `FEEDBACK_SYNC_SECRET`. `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are provided by the Edge runtime. The Vault secret `feedback_sync_secret` holds the same value as `FEEDBACK_SYNC_SECRET`, so the cron job can send it.
+Function secrets, set with `supabase secrets set` and never committed: `LINEAR_API_KEY`, `LINEAR_TEAM_ID` (`f22b9dae-976e-40ef-82a0-97e93231a2a3`), and `FEEDBACK_SYNC_SECRET`. `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are provided by the Edge runtime. The Vault secret `feedback_sync_secret` holds the same value as `FEEDBACK_SYNC_SECRET`, and `feedback_sync_url` holds the function URL. The cron job reads both and sends nothing until both exist, so a local stack never calls production.
 
 Response body, used by logs and tests: `{ "claimed": n, "created": n, "failed": n }`.
 
