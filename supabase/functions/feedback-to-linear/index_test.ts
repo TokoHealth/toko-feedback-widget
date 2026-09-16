@@ -176,6 +176,11 @@ Deno.test("page title, URL and email cannot add links, images or lines", () => {
   ]);
 });
 
+Deno.test("a backslash in the URL cannot end the link early", () => {
+  const input = buildIssueInput(row(1, { url: String.raw`x![i](https://evil.test/p.png)\` }), { teamId: "t", supabaseUrl: "u" });
+  assertStringIncludes(input.description, "(<x![i](https://evil.test/p.png)%5C>)");
+});
+
 Deno.test("a failed database write gives untried rows back their attempt", async () => {
   const { db, calls } = fakeDb([row(1), row(2), row(3)]);
   db.saveIssue = (id) => {

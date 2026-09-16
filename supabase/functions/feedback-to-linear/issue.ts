@@ -55,7 +55,7 @@ export function buildIssueInput(
     [
       `**Reporter:** ${inline(row.created_by_email ?? "unknown")}`,
       `**Environment:** ${inline(row.environment)}`,
-      `**Page:** [${inline(row.page_title || row.url)}](<${row.url.replace(/[\s<>]/g, encodeURIComponent)}>)`,
+      `**Page:** [${inline(row.page_title || row.url)}](<${row.url.replace(/[\s<>\\]/g, encodeURIComponent)}>)`,
     ].join("  \n"),
   );
   for (const [label, path] of [["Screenshot", row.screenshot_path], ["Drawing", row.annotated_image_path]]) {
